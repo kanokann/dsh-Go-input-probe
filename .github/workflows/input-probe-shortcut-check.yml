@@ -1,0 +1,37 @@
+name: Verify input probe APK source shortcuts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shortcuts:
+    if: github.repository_owner == 'kanokann'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DSH_TEST_FONT_DIR: /usr/share/fonts/opentype/noto
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Test exactly the source of the already built APK, not current main.
+          ref: f6061c029deefb493d8cde4e4abc6511c04785b7
+      - name: Check APK source identity
+        run: test "$(git rev-parse HEAD)" = f6061c029deefb493d8cde4e4abc6511c04785b7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - name: Install the fonts required by the existing test configuration
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-cjk-extra
+          for weight in Light Regular Bold; do
+            test -f "$DSH_TEST_FONT_DIR/NotoSansCJK-$weight.ttc"
+          done
+      - name: Parallel package shortcut regression test
+        working-directory: app
+        run: flutter test test/system_entry/launcher_icon_geometry_test.dart --reporter expanded
