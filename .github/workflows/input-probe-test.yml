@@ -70,8 +70,17 @@ jobs:
       - name: Native regression tests
         working-directory: app/android
         run: ./gradlew :app:testArm64ReleaseUnitTest -Pandroid.onlyEnableUnitTestForTheTestedBuildType=false --no-daemon
+      - name: Install the fonts required by the existing test configuration
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-cjk-extra
+          for weight in Light Regular Bold; do
+            test -f "/usr/share/fonts/opentype/noto/NotoSansCJK-$weight.ttc"
+          done
       - name: Parallel package shortcut regression test
         working-directory: app
+        env:
+          DSH_TEST_FONT_DIR: /usr/share/fonts/opentype/noto
         run: flutter test test/system_entry/launcher_icon_geometry_test.dart
       - uses: actions/upload-artifact@v4
         if: always()
