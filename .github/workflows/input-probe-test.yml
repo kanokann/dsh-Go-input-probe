@@ -1,0 +1,74 @@
+name: Input probe arm64 test APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # A test build belongs in a user fork, never the upstream repository.
+    if: github.repository_owner != 'ccch1mneyyy'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require the exact v1.0.9 baseline
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD^)" = 3a01884cda46ad5a6df64cc8640713437b313735
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - uses: android-actions/setup-android@v3
+      - name: Verify and reuse only the official v1.0.9 runtime
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/dsh-runtime"
+          curl --fail --location --retry 3 https://github.com/ccch1mneyyy/dsh-Go/releases/download/v1.0.9/dsh-go-1.0.9-arm64.apk -o "$RUNNER_TEMP/dsh-runtime/official.apk"
+          curl --fail --location --retry 3 https://github.com/ccch1mneyyy/dsh-Go/releases/download/v1.0.9/SHA256SUMS -o "$RUNNER_TEMP/dsh-runtime/SHA256SUMS"
+          python3 tooling/extract-test-runtime.py "$RUNNER_TEMP/dsh-runtime/official.apk" "$RUNNER_TEMP/dsh-runtime/SHA256SUMS" runtime/out/arm64-v8a
+      - name: Resolve application dependencies
+        working-directory: app
+        run: flutter pub get
+      - name: Configure Gradle SDK paths
+        shell: bash
+        run: |
+          printf 'flutter.sdk=%s\nsdk.dir=%s\n' "$FLUTTER_ROOT" "$ANDROID_HOME" > app/android/local.properties
+      - name: Native regression tests
+        working-directory: app/android
+        run: ./gradlew testArm64ReleaseUnitTest --no-daemon
+      - name: Build the independently installable test application
+        run: tooling/build-apk.sh --build-name 1.0.9-input-probe.1 -f arm64
+      - name: Verify application identity and signature
+        shell: bash
+        run: |
+          tools_dir=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          "$tools_dir/aapt2" dump badging app/build/app/outputs/flutter-apk/app-arm64-release.apk > "$RUNNER_TEMP/badging.txt"
+          grep -q "package: name='io.github.kanokann.dsh_probe'" "$RUNNER_TEMP/badging.txt"
+          grep -q "application-label:'DSH Go 输入自检测试'" "$RUNNER_TEMP/badging.txt"
+          "$tools_dir/apksigner" verify --verbose app/build/app/outputs/flutter-apk/app-arm64-release.apk
+          mkdir -p artifacts
+          cp app/build/app/outputs/flutter-apk/app-arm64-release.apk artifacts/dsh-go-1.0.9-input-probe-arm64.apk
+          cd artifacts
+          sha256sum dsh-go-1.0.9-input-probe-arm64.apk > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-go-1.0.9-input-probe-arm64
+          path: artifacts/
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-test-results
+          path: app/build/app/reports/tests/
+          if-no-files-found: ignore
