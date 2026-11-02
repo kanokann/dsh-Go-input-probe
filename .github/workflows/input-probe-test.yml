@@ -50,12 +50,6 @@ jobs:
           printf 'flutter.sdk=%s\nsdk.dir=%s\n' "$FLUTTER_ROOT" "$ANDROID_HOME" > app/android/local.properties
       - name: Build the independently installable test application
         run: tooling/build-apk.sh --build-name 1.0.9-input-probe.1 -f arm64
-      - name: Native regression tests
-        working-directory: app/android
-        run: ./gradlew testArm64ReleaseUnitTest --no-daemon
-      - name: Parallel package shortcut regression test
-        working-directory: app
-        run: flutter test test/system_entry/launcher_icon_geometry_test.dart
       - name: Verify application identity and signature
         shell: bash
         run: |
@@ -73,6 +67,21 @@ jobs:
           name: dsh-go-1.0.9-input-probe-arm64
           path: artifacts/
           retention-days: 14
+      - name: Native regression tests
+        working-directory: app/android
+        run: ./gradlew :app:testArm64ReleaseUnitTest -Pandroid.onlyEnableUnitTestForTheTestedBuildType=false --no-daemon
+      - name: Install the fonts required by the existing test configuration
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-cjk-extra
+          for weight in Light Regular Bold; do
+            test -f "/usr/share/fonts/opentype/noto/NotoSansCJK-$weight.ttc"
+          done
+      - name: Parallel package shortcut regression test
+        working-directory: app
+        env:
+          DSH_TEST_FONT_DIR: /usr/share/fonts/opentype/noto
+        run: flutter test test/system_entry/launcher_icon_geometry_test.dart
       - uses: actions/upload-artifact@v4
         if: always()
         with:
