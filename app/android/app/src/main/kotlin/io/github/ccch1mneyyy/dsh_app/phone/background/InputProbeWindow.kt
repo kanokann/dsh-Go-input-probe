@@ -75,7 +75,7 @@ internal class InputProbeWindow(
                     }
 
                     override fun onTouchEvent(event: MotionEvent): Boolean {
-                        if (!closed.get() && receipt.accept(event.displayId, event.downTime,
+                        if (!closed.get() && receipt.accept(this.display?.displayId ?: Display.INVALID_DISPLAY, event.downTime,
                                 event.actionMasked, event.rawX, event.rawY)) received.countDown()
                         return true
                     }
