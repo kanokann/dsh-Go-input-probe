@@ -19,7 +19,8 @@ jobs:
       - name: Require the exact v1.0.9 baseline
         shell: bash
         run: |
-          test "$(git rev-parse HEAD^)" = 3a01884cda46ad5a6df64cc8640713437b313735
+          test "$(git merge-base HEAD 3a01884cda46ad5a6df64cc8640713437b313735)" = 3a01884cda46ad5a6df64cc8640713437b313735
+          test -z "$(git rev-list --min-parents=2 3a01884cda46ad5a6df64cc8640713437b313735..HEAD)"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -30,6 +31,9 @@ jobs:
           channel: stable
           cache: true
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - name: Verify and reuse only the official v1.0.9 runtime
         shell: bash
         run: |
