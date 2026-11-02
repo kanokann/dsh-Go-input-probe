@@ -53,6 +53,9 @@ jobs:
       - name: Native regression tests
         working-directory: app/android
         run: ./gradlew testArm64ReleaseUnitTest --no-daemon
+      - name: Parallel package shortcut regression test
+        working-directory: app
+        run: flutter test test/system_entry/launcher_icon_geometry_test.dart
       - name: Verify application identity and signature
         shell: bash
         run: |
