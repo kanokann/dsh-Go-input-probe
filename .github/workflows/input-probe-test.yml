@@ -48,11 +48,11 @@ jobs:
         shell: bash
         run: |
           printf 'flutter.sdk=%s\nsdk.dir=%s\n' "$FLUTTER_ROOT" "$ANDROID_HOME" > app/android/local.properties
+      - name: Build the independently installable test application
+        run: tooling/build-apk.sh --build-name 1.0.9-input-probe.1 -f arm64
       - name: Native regression tests
         working-directory: app/android
         run: ./gradlew testArm64ReleaseUnitTest --no-daemon
-      - name: Build the independently installable test application
-        run: tooling/build-apk.sh --build-name 1.0.9-input-probe.1 -f arm64
       - name: Verify application identity and signature
         shell: bash
         run: |
