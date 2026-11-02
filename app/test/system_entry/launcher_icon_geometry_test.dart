@@ -95,6 +95,7 @@ void main() {
     final entry = _source('shortcuts/EntryActivity.kt');
     final gradle = File('android/app/build.gradle.kts').readAsStringSync();
     final applicationId = RegExp(r'applicationId = "([^"]+)"').firstMatch(gradle)!.group(1)!;
+    final namespace = RegExp(r'namespace = "([^"]+)"').firstMatch(gradle)!.group(1)!;
     final strings = readRes('values-zh/entry_strings.xml');
 
     final shortcuts = RegExp(r'<shortcut\b([\s\S]*?)</shortcut>').allMatches(xml).map((m) => m.group(1)!).toList();
@@ -127,7 +128,7 @@ void main() {
       );
       for (final s in shortcuts) {
         expect(attr(s, 'targetPackage'), applicationId);
-        expect(attr(s, 'targetClass'), '$applicationId.shortcuts.EntryActivity');
+        expect(attr(s, 'targetClass'), '$namespace.shortcuts.EntryActivity');
       }
     });
   });

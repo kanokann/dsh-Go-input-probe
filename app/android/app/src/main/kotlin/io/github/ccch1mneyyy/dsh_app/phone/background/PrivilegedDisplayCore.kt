@@ -113,6 +113,8 @@ class PrivilegedDisplayCore(private val context: Context) {
 
     private fun failureCode(e: Throwable): String = when (e) {
         is Fault -> e.code
+        is InputProbe.Failure -> e.code
+        is InterruptedException -> "cancelled"
         is SecurityException -> "systemOperationDenied"
         else -> "deviceUnavailable"
     }
@@ -172,18 +174,24 @@ class PrivilegedDisplayCore(private val context: Context) {
     }
 
     /**
-     * Capability probe: create a tiny trusted display (fails with displayUnsupported on 15-QPR2-type
-     * ROMs) and inject one harmless event (fails on Xiaomi without 「USB 调试(安全设置)」). Then
-     * release. Reports [Proto.OK] + [Proto.INJECT_OK]; never launches an app.
+     * Probe an inert window on a dedicated trusted display, including a correlated DOWN/UP
+     * receipt. An empty display cannot test input delivery. Never launches a user app.
      */
     private fun gateProbe(response: Bundle) {
         try {
             owner = "__gate__"
-            createDisplay(Bundle().apply { putInt(Proto.SHORT_SIDE, 360); putInt(Proto.ASPECT_W, 9); putInt(Proto.ASPECT_H, 20) })
-            val injection = runCatching { injectTap(1, 1, false) }
+            createDisplay(Bundle().apply { putInt(Proto.SHORT_SIDE, 360); putInt(Proto.ASPECT_W, 9); putInt(Proto.ASPECT_H, 20) }, probe = true)
+            response.putInt(Proto.DISPLAY_ID, displayId())
+            val injection = runCatching {
+                InputProbe.verify(
+                    open = { InputProbeWindow(privileged, checkNotNull(display).display) { x, y, time ->
+                        injectTap(x, y, false, time)
+                    } },
+                    releaseDisplay = { releaseAll() },
+                )
+            }
             response.putBoolean(Proto.INJECT_OK, injection.isSuccess)
             injection.exceptionOrNull()?.let { response.putString(Proto.INJECT_ERROR, failureCode(it)) }
-            response.putInt(Proto.DISPLAY_ID, displayId())
         } finally {
             releaseAll()
         }
@@ -194,7 +202,7 @@ class PrivilegedDisplayCore(private val context: Context) {
     private fun displayId(): Int = display?.display?.displayId ?: throw Fault("displayMissing")
     private fun requireDisplay() { if (display == null) throw Fault("displayMissing") }
 
-    private fun createDisplay(request: Bundle) {
+    private fun createDisplay(request: Bundle, probe: Boolean = false) {
         val shortSide = request.getInt(Proto.SHORT_SIDE, 720).coerceIn(360, 1080)
         val aspectW = request.getInt(Proto.ASPECT_W, 9).coerceAtLeast(1)
         val aspectH = request.getInt(Proto.ASPECT_H, 20).coerceAtLeast(1)
@@ -209,7 +217,8 @@ class PrivilegedDisplayCore(private val context: Context) {
                     bits or DisplayManager::class.java.getDeclaredField("VIRTUAL_DISPLAY_FLAG_$name").getInt(null)
                 }
             } catch (_: ReflectiveOperationException) { throw Fault("displayUnsupported") }
-            val vd = displays.createVirtualDisplay("dsh-background", w, h, 320, ir.surface, flags)
+            val vd = displays.createVirtualDisplay("dsh-background", w, h, 320, ir.surface,
+                flags or if (probe) DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION else 0)
             if (vd.display.displayId <= Display.DEFAULT_DISPLAY) { vd.release(); throw Fault("displayUnsupported") }
             width = w; height = h; reader = ir; display = vd
             // Keep the virtual display's keyboard off the main screen: IME policy HIDE.
@@ -638,8 +647,7 @@ class PrivilegedDisplayCore(private val context: Context) {
 
     // ---- injection shims (hidden APIs via reflection) ----------------------
 
-    private fun injectTap(x: Int, y: Int, long: Boolean) {
-        val down = SystemClock.uptimeMillis()
+    private fun injectTap(x: Int, y: Int, long: Boolean, down: Long = SystemClock.uptimeMillis()) {
         sendMotion(MotionEvent.ACTION_DOWN, x, y, down)
         sleepChecked(if (long) 650 else 60)
         sendMotion(MotionEvent.ACTION_UP, x, y, down)
